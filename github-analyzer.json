@@ -1,0 +1,260 @@
+{
+  "name": "github-analyzer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-review",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "55fa9a01-ec9e-47ba-a417-5772196e9554",
+      "name": "Webhook",
+      "webhookId": "e9c9b083-cc92-4c30-a0fb-72ace4baadb7"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/users/BKarthika-dot\n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "=user-agent",
+              "value": "=PostmanRuntime/7.47.1"
+            },
+            {
+              "name": "=accept",
+              "value": "=application/json "
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "bdcff8ce-e6c1-49b8-b053-bd8d5a14b0a2",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/users/BKarthika-dot/repos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "user-agent",
+              "value": "n8n"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "5f1ff4e0-4daa-453a-b4cd-716ab3c962eb",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n// ================================\n// GitHub Repository Analyzer\n// n8n Code Node\n// ================================\n\n// Total repositories returned\nconst totalRepos = items.length;\n\n// Language frequency map\nconst languages = {};\n\n// Count of recently updated repositories\nlet recentRepos = 0;\n\n// Optional: GitHub username (if passed from earlier node)\nconst githubUsername = items[0]?.json?.owner?.login || \"Unknown\";\n\n// Repositories updated after this date are considered \"recent\"\nconst cutoffDate = new Date(\"2025-10-01\");\n\n// Process repositories\nfor (const item of items) {\n  const repo = item.json;\n\n  // Language tracking\n  if (repo.language) {\n    languages[repo.language] = (languages[repo.language] || 0) + 1;\n  }\n\n  // Recent activity check\n  const updatedAt = new Date(repo.updated_at);\n  if (updatedAt > cutoffDate) {\n    recentRepos++;\n  }\n}\n\n// Profile strength evaluation\nlet profileStrength = \"Weak\";\n\nif (totalRepos >= 10 && recentRepos >= 3) {\n  profileStrength = \"Good\";\n}\n\nif (totalRepos >= 20 && Object.keys(languages).length >= 3) {\n  profileStrength = \"Strong\";\n}\n\n// Build readable report text (for Gmail / AI / logs)\nconst text = `\nGitHub Profile Analysis for ${githubUsername}\n\nTotal Repositories: ${totalRepos}\nRecently Active Repositories: ${recentRepos}\n\nLanguages Used:\n${Object.entries(languages)\n  .map(([lang, count]) => `- ${lang}: ${count} repos`)\n  .join(\"\\n\")}\n\nOverall Profile Strength: ${profileStrength}\n`;\n\n// ================================\n// Final Output (THIS is what n8n sees)\n// ================================\n\nreturn [\n  {\n    json: {\n      github_username: githubUsername,\n      totalRepos,\n      recentRepos,\n      languages,\n      profileStrength,\n      text\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "dcf2dfb8-713c-4d52-8e96-4ce93b5dae3f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a senior software engineer and career mentor.\n\nYou are reviewing a student's GitHub profile.\n\nYou may have access to previous conversations and past GitHub reviews of this same student.\nIf previous context exists, you should:\n- Compare the current profile with earlier versions\n- Explicitly mention improvements, consistency, or lack of progress\n- Highlight what the student is doing better than before\n- Point out any recurring weaknesses that are still not addressed\n\nIf no previous context exists, treat this as the first review and say so briefly.\n\nYour job is to:\n1. Identify strengths\n2. Identify weaknesses\n3. Explain how recruiters would perceive this profile\n4. Suggest 3 specific project ideas to improve employability\n5. Suggest how the student should pitch their GitHub in interviews\n\nBe honest, constructive, and student-friendly.\nSpeak like a mentor who is tracking this student's growth over time.\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "2e74a025-25af-44ad-a3ee-004db38cf24d",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        704,
+        208
+      ],
+      "id": "8aeb65c8-8252-4c4f-a9e6-362ccd2a2e1f",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "bpk6fvePZotloTPD",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.github_username }}",
+        "databaseName": "github_analyzer"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryMongoDbChat",
+      "typeVersion": 1,
+      "position": [
+        848,
+        208
+      ],
+      "id": "eabb5abb-a6ba-4b6e-af7c-349497c6ef1b",
+      "name": "MongoDB Chat Memory",
+      "credentials": {
+        "mongoDb": {
+          "id": "VM6HZmwN1AxvkxFz",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "bkarthika1203@gmail.com",
+        "subject": "Detailed Github Analysis",
+        "emailType": "text",
+        "message": "={{ $json.output }}\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1152,
+        0
+      ],
+      "id": "caf090b8-6996-451c-b6a3-0fac19bff5a7",
+      "name": "Send a message",
+      "webhookId": "9fb3b031-a644-43c5-8498-d70f458273bb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "77JJEYCXCvZatPWF",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "bb504c9d-8819-4455-9e9b-0506aa4a5e08",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "62823698c5c2457103d29885c4ecdeae5cbae28f9ae2aa2f306a37a18d018ab8"
+  },
+  "id": "T2x3X9BOg0bwUAeI6XKI8",
+  "tags": []
+}

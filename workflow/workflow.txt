@@ -1,0 +1,24 @@
+🏗️ Architecture Overview
+
+Webhook → GitHub API → Repo Analysis (JS) → AI Agent (LLM)
+→ MongoDB Chat Memory → Gmail Report Delivery
+
+This project is implemented as an automated n8n workflow.
+
+Workflow overview:
+
+A Webhook node receives a POST request containing a GitHub username.
+
+During development and testing, Postman was used to send the POST request to the n8n test webhook URL.
+
+The username is passed to a GitHub API HTTP Request node to fetch profile and repository data.
+
+A JavaScript code node analyzes repositories (languages, activity, recency, and overall strength).
+
+An AI Agent node reviews the analysis and generates a career-focused GitHub report.
+
+MongoDB chat memory is used to retain past interactions and track improvement over time.
+
+The final report is sent to the user via Gmail.
+
+Once deployed, the workflow can be triggered programmatically without Postman by calling the production webhook endpoint.

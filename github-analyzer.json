@@ -10,7 +10,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
+        -112,
         0
       ],
       "id": "55fa9a01-ec9e-47ba-a417-5772196e9554",
@@ -38,7 +38,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        208,
+        48,
         0
       ],
       "id": "bdcff8ce-e6c1-49b8-b053-bd8d5a14b0a2",
@@ -65,7 +65,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        416,
+        240,
         0
       ],
       "id": "5f1ff4e0-4daa-453a-b4cd-716ab3c962eb",
@@ -73,12 +73,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n// ================================\n// GitHub Repository Analyzer\n// n8n Code Node\n// ================================\n\n// Total repositories returned\nconst totalRepos = items.length;\n\n// Language frequency map\nconst languages = {};\n\n// Count of recently updated repositories\nlet recentRepos = 0;\n\n// Optional: GitHub username (if passed from earlier node)\nconst githubUsername = items[0]?.json?.owner?.login || \"Unknown\";\n\n// Repositories updated after this date are considered \"recent\"\nconst cutoffDate = new Date(\"2025-10-01\");\n\n// Process repositories\nfor (const item of items) {\n  const repo = item.json;\n\n  // Language tracking\n  if (repo.language) {\n    languages[repo.language] = (languages[repo.language] || 0) + 1;\n  }\n\n  // Recent activity check\n  const updatedAt = new Date(repo.updated_at);\n  if (updatedAt > cutoffDate) {\n    recentRepos++;\n  }\n}\n\n// Profile strength evaluation\nlet profileStrength = \"Weak\";\n\nif (totalRepos >= 10 && recentRepos >= 3) {\n  profileStrength = \"Good\";\n}\n\nif (totalRepos >= 20 && Object.keys(languages).length >= 3) {\n  profileStrength = \"Strong\";\n}\n\n// Build readable report text (for Gmail / AI / logs)\nconst text = `\nGitHub Profile Analysis for ${githubUsername}\n\nTotal Repositories: ${totalRepos}\nRecently Active Repositories: ${recentRepos}\n\nLanguages Used:\n${Object.entries(languages)\n  .map(([lang, count]) => `- ${lang}: ${count} repos`)\n  .join(\"\\n\")}\n\nOverall Profile Strength: ${profileStrength}\n`;\n\n// ================================\n// Final Output (THIS is what n8n sees)\n// ================================\n\nreturn [\n  {\n    json: {\n      github_username: githubUsername,\n      totalRepos,\n      recentRepos,\n      languages,\n      profileStrength,\n      text\n    }\n  }\n];\n"
+        "jsCode": "const repoDetails = [];\nconst languages = {};\nlet recentRepos = 0;\nconst cutoffDate = new Date(\"2025-10-01\");\nconst githubUsername = items[0]?.json?.owner?.login || \"Unknown\";\n\n// Helper: detect README file (case-insensitive) and extract first few lines as main idea\nfunction extractReadmeMainIdea(repo) {\n    if (!repo.files) return { readme: \"No README content\", mainIdea: \"No main idea available\" };\n    const readmeFile = Object.keys(repo.files).find(f => f.toLowerCase() === \"readme.md\");\n    if (!readmeFile) return { readme: \"No README content\", mainIdea: \"No main idea available\" };\n    const content = repo.files[readmeFile].content || \"\";\n    const lines = content.split(\"\\n\").map(l => l.trim()).filter(l => l.length > 0);\n    const mainIdea = lines.slice(0, 3).join(\" \");\n    return { readme: content, mainIdea: mainIdea || \"README exists but no main idea detected\" };\n}\n\n// ================================\n// Process each repo\n// ================================\nconst deterministicReview = [];\n\nfor (const item of items) {\n    const repo = item.json;\n\n    // Track languages\n    if (repo.language) {\n        languages[repo.language] = (languages[repo.language] || 0) + 1;\n    }\n\n    // Track recent activity\n    const updatedAt = new Date(repo.updated_at);\n    if (updatedAt > cutoffDate) recentRepos++;\n\n    // Extract README content and main idea\n    const { readme, mainIdea } = extractReadmeMainIdea(repo);\n\n    // Determine strengths and weaknesses for this repo\n    const strengths = [];\n    const weaknesses = [];\n\n    if (repo.language && repo.language !== \"Unknown\") strengths.push(`Uses ${repo.language}`);\n    if (repo.description && repo.description !== \"No description provided\") strengths.push(`Has description: \"${repo.description}\"`);\n    if (readme && readme !== \"No README content\") strengths.push(`Has README`);\n    if (mainIdea && mainIdea !== \"No main idea available\") strengths.push(`Main idea: ${mainIdea}`);\n\n    if (!repo.description || repo.description === \"No description provided\") weaknesses.push(\"Missing description\");\n    if (!readme || readme === \"No README content\") weaknesses.push(\"Missing README\");\n\n    // Add repo-level review\n    deterministicReview.push({\n        name: repo.name,\n        description: repo.description || \"No description provided\",\n        language: repo.language || \"Unknown\",\n        mainIdea,\n        strengths,\n        weaknesses,\n        html_url: repo.html_url || \"No URL\",\n        updated_at: repo.updated_at || \"Unknown\",\n        topics: repo.topics || []\n    });\n\n    // Also store for RAG\n    repoDetails.push({\n        name: repo.name,\n        description: repo.description || \"No description provided\",\n        language: repo.language || \"Unknown\",\n        html_url: repo.html_url || \"No URL\",\n        updated_at: repo.updated_at || \"Unknown\",\n        topics: repo.topics || [],\n        readme,\n        mainIdea\n    });\n}\n\n// ================================\n// Evaluate profile strength\n// ================================\nlet profileStrength = \"Weak\";\nif (items.length >= 10 && recentRepos >= 3) profileStrength = \"Good\";\nif (items.length >= 20 && Object.keys(languages).length >= 3) profileStrength = \"Strong\";\n\n// ================================\n// RAG-style stringified repo details\n// ================================\nconst repoDetailsText = repoDetails\n    .map(repo => `\nRepo Name: ${repo.name}\nDescription: ${repo.description}\nLanguage: ${repo.language}\nURL: ${repo.html_url}\nUpdated At: ${repo.updated_at}\nTopics: ${(repo.topics && repo.topics.length > 0) ? repo.topics.join(\", \") : \"None\"}\nREADME Main Idea: ${repo.mainIdea}\n`)\n    .join(\"\\n\\n\");\n\n// ================================\n// Final output for n8n\n// ================================\nreturn {\n    github_username: githubUsername,\n    totalRepos: items.length,\n    recentRepos,\n    languages,\n    profileStrength,\n    deterministicReview,  // repo-level objects including mainIdea\n    repoDetailsText       // flattened string for AI\n};\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        624,
+        432,
         0
       ],
       "id": "dcf2dfb8-713c-4d52-8e96-4ce93b5dae3f",
@@ -87,7 +87,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "You are a senior software engineer and career mentor.\n\nYou are reviewing a student's GitHub profile.\n\nYou may have access to previous conversations and past GitHub reviews of this same student.\nIf previous context exists, you should:\n- Compare the current profile with earlier versions\n- Explicitly mention improvements, consistency, or lack of progress\n- Highlight what the student is doing better than before\n- Point out any recurring weaknesses that are still not addressed\n\nIf no previous context exists, treat this as the first review and say so briefly.\n\nYour job is to:\n1. Identify strengths\n2. Identify weaknesses\n3. Explain how recruiters would perceive this profile\n4. Suggest 3 specific project ideas to improve employability\n5. Suggest how the student should pitch their GitHub in interviews\n\nBe honest, constructive, and student-friendly.\nSpeak like a mentor who is tracking this student's growth over time.\n",
+        "text": "You are a senior software engineer and career mentor.\n\nYou have been given a student's GitHub profile in a deterministic, structured format. \nYou must NOT invent or hallucinate any repositories or project details. \nOnly use the information in the provided array.\n\nThe data is in the variable \"deterministicReview\", which is an array of objects. \nEach object has the following fields:\n- name: the repository name\n- description: repository description\n- language: programming language used\n- mainIdea: a short summary of the project's README/main purpose\n- strengths: an array of factual strengths about the repo\n- weaknesses: an array of factual weaknesses about the repo\n- html_url: repo URL\n- updated_at: last update date\n- topics: topics or tags associated with the repo\n\nYour tasks:\n\n1. **Analyze the student's GitHub profile**:\n   - Highlight overall strengths across all repos.\n   - Highlight recurring weaknesses or areas for improvement.\n   - Give constructive feedback that would help the student improve their portfolio from a recruiter’s perspective.\n\n2. **Suggest specific project expansions or enhancements** for each repo** based on its description and mainIdea. Do NOT invent new repos. Focus on what could realistically improve each existing repo.\n\n3. **Give advice on how to pitch this GitHub profile in interviews**:\n   - Focus on skills demonstrated.\n   - Highlight active languages and projects.\n   - Show awareness of areas being improved.\n\nFormat your output as follows:\n\n**Overall Strengths:**  \n- [Bullet points summarizing strengths]\n\n**Overall Weaknesses / Areas for Improvement:**  \n- [Bullet points summarizing weaknesses]\n\n**Repo-wise Suggestions:**  \n- Repo Name: <repo name>  \n  - Key Improvements / Project Expansions: <constructive suggestions based on mainIdea>  \n  - Strengths: <list of strengths>  \n  - Weaknesses: <list of weaknesses>\n\n**Interview Pitch Advice:**  \n- [Brief, actionable advice for presenting this GitHub profile]\n\nUse concise, clear language. Be honest, constructive, and growth-oriented. Only reference the repos in the deterministicReview array.\n",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -98,26 +98,6 @@
       ],
       "id": "2e74a025-25af-44ad-a3ee-004db38cf24d",
       "name": "AI Agent"
-    },
-    {
-      "parameters": {
-        "model": "llama-3.1-8b-instant",
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
-      "position": [
-        704,
-        208
-      ],
-      "id": "8aeb65c8-8252-4c4f-a9e6-362ccd2a2e1f",
-      "name": "Groq Chat Model",
-      "credentials": {
-        "groqApi": {
-          "id": "bpk6fvePZotloTPD",
-          "name": "Groq account"
-        }
-      }
     },
     {
       "parameters": {
@@ -163,6 +143,55 @@
           "name": "Gmail account"
         }
       }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e71a64fd-a401-47bb-bece-b45ec7210682",
+              "name": "github_username",
+              "value": "={{ $json.github_username }}",
+              "type": "string"
+            },
+            {
+              "id": "037e3e81-ad7d-4a20-a2cd-7b12e5729d36",
+              "name": "deterministicReview",
+              "value": "={{ $json.deterministicReview }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "36736cd7-11cc-46dd-aae3-0982e083df6c",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-lite-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        624,
+        208
+      ],
+      "id": "df3ee2f9-12e8-45da-875f-dc9c97a8629d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hzBDenjoMWvIveik",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -204,19 +233,8 @@
       "main": [
         [
           {
-            "node": "AI Agent",
+            "node": "Edit Fields",
             "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]
@@ -243,6 +261,28 @@
           }
         ]
       ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -250,7 +290,7 @@
     "executionOrder": "v1",
     "availableInMCP": false
   },
-  "versionId": "bb504c9d-8819-4455-9e9b-0506aa4a5e08",
+  "versionId": "23ec1407-3d36-47c2-9384-9853075aa40c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "62823698c5c2457103d29885c4ecdeae5cbae28f9ae2aa2f306a37a18d018ab8"
